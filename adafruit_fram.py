@@ -57,6 +57,9 @@ _MAX_SIZE_SPI = const(8191)
 _I2C_MANF_ID = const(0x0A)
 _I2C_PROD_ID = const(0x510)
 
+_SPI_MANF_ID = const(0x04)
+_SPI_PROD_ID = const(0x302)
+
 class FRAM:
     """
     Driver base for the FRAM Breakout.
@@ -278,3 +281,88 @@ class FRAM_I2C(FRAM):
                     buffer[1] = ((start_register + i) - self._max_size) & 0xFF
                 buffer[2] = data[i]
                 i2c.write(buffer)
+
+class FRAM_SPI(FRAM):
+    """ SPI class for FRAM.
+
+    """
+    _SPI_OPCODE_WREN = const(0x6) # Set write enable latch
+    _SPI_OPCODE_WRDI = const(0x4) # Reset write enable latch
+    _SPI_OPCODE_RDSR = const(0x5) # Read status register
+    _SPI_OPCODE_WRSR = const(0x1) # Write status register
+    _SPI_OPCODE_READ = const(0x3) # Read memory code
+    _SPI_OPCODE_WRITE = const(0x2) # Write memory code
+    _SPI_OPCODE_RDID = const(0x9F) # Read device ID
+
+    #pylint: disable=too-many-arguments
+    def __init__(self, SPI_SCK, SPI_MOSI, SPI_MISO, SPI_CS, write_protect=False,
+                wp_pin=None, baudrate=100000):
+        import digitalio
+        from busio import SPI
+        from adafruit_bus_device.spi_device import SPIDevice as spidev
+        spi_bus = SPI(SPI_SCK, SPI_MOSI, SPI_MISO)
+        cs = digitalio.DigitalInOut(SPI_CS)
+        _spi = spidev(spi_bus, cs, baudrate=baudrate)
+
+        write_buffer = bytearray([_SPI_OPCODE_RDID])
+        read_buffer = bytearray(4)
+        with _spi as spi:
+            spi.write(write_buffer)
+            spi.readinto(read_buffer)
+
+        print("Device ID:", read_buffer)
+        prod_id = (read_buffer[3] << 8) + (read_buffer[2])
+        if (read_buffer[0] != _SPI_MANF_ID) and (prod_id != _SPI_PROD_ID):
+            raise OSError("FRAM SPI device not found.")
+
+        self._spi = _spi
+        super().__init__(_MAX_SIZE_SPI, write_protect, wp_pin)
+
+    def _read_register(self, register):
+        write_buffer = bytearray(3)
+        write_buffer[0] = _SPI_OPCODE_READ
+        write_buffer[1] = register >> 8
+        write_buffer[2] = register & 0xFF
+        read_buffer = bytearray(1)
+        with self._spi as spi:
+            spi.write(write_buffer)
+            spi.readinto(read_buffer)
+        return read_buffer
+
+    def _write_register(self, register, data):
+        buffer = bytearray(4)
+        buffer[0] = _SPI_OPCODE_WRITE
+        buffer[1] = register >> 8
+        buffer[2] = register & 0xFF
+        buffer[3] = data
+        with self._spi as spi:
+            spi.write(bytearray([_SPI_OPCODE_WREN]))
+        with self._spi as spi:
+            spi.write(buffer)
+        with self._spi as spi:
+            spi.write(bytearray([_SPI_OPCODE_WRDI]))
+
+    def _write_page(self, start_register, data, wraparound=False):
+        buffer = bytearray(3)
+        data_length = len(data)
+        if (start_register + data_length) > self._max_size:
+            if wraparound:
+                pass
+            else:
+                raise ValueError("Starting register + data length extends beyond"
+                                 " FRAM maximum size. Use 'wraparound=True' to"
+                                 " override this warning.")
+        with self._spi as spi:
+            spi.write(bytearray([_SPI_OPCODE_WREN]))
+        with self._spi as spi:
+            for i in range(0, data_length):
+                if not (start_register + i) > self._max_size:
+                    buffer[0] = (start_register + i) >> 8
+                    buffer[1] = (start_register + i) & 0xFF
+                else:
+                    buffer[0] = ((start_register + i) - self._max_size) >> 8
+                    buffer[1] = ((start_register + i) - self._max_size) & 0xFF
+                buffer[2] = data[i]
+                spi.write(buffer)
+        with self._spi as spi:
+            spi.write(bytearray([_SPI_OPCODE_WRDI]))
