@@ -102,12 +102,6 @@ class FRAM:
             status = self._wp
         return status
 
-    @write_protected.setter
-    def write_protected(self, value):
-        self._wp = value
-        if not self._wp_pin is None:
-            self._wp_pin.value = value
-
     def write_protect_pin(self, wp_pin, write_protect=False):
         """ Assigns the write protection (``WP``) pin.
 
@@ -129,6 +123,7 @@ class FRAM:
                 # Deinit the pin to release it
                 self._wp_pin.deinit()
             self._wp_pin = None
+        self.write_protect = write_protect
 
     def read(self, register, length=1):
         """ Reads the data stored on the FRAM.
@@ -282,6 +277,12 @@ class FRAM_I2C(FRAM):
                 buffer[2] = data[i]
                 i2c.write(buffer)
 
+    @FRAM.write_protected.setter
+    def write_protected(self, value):
+        self._wp = value
+        if not self._wp_pin is None:
+            self._wp_pin.value = value
+
 class FRAM_SPI(FRAM):
     """ SPI class for FRAM.
 
@@ -366,3 +367,20 @@ class FRAM_SPI(FRAM):
                 spi.write(buffer)
         with self._spi as spi:
             spi.write(bytearray([_SPI_OPCODE_WRDI]))
+
+    @FRAM.write_protected.setter
+    def write_protected(self, value):
+        # While it is possible to protect block ranges on the SPI chip,
+        # it seems superfluous to do so. So, block protection always protects
+        # the entire memory (BP0 and BP1).
+        self._wp = value
+        write_buffer = bytearray(2)
+        write_buffer[0] = _SPI_OPCODE_WRSR
+        if value:
+            write_buffer[1] = 0x8C # set WPEN, BP0, and BP1
+        else:
+            write_buffer[1] = 0x00 # clear WPEN, BP0, and BP1
+        with self._spi as spi:
+            spi.write(write_buffer)
+        if not self._wp_pin is None:
+            self._wp_pin.value = value
