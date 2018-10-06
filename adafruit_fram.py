@@ -148,7 +148,7 @@ class FRAM:
                              " ({0})".format(self._max_size))
         read_buffer = bytearray(length)
         for i in range(length):
-            read_buffer[i] = self._read_byte(register + i)[0]
+            read_buffer[i] = self._read_register(register + i)[0]
         return read_buffer
 
     def write_single(self, register, data):
@@ -188,9 +188,6 @@ class FRAM:
                              " FRAM size. ({1})".format(start_register,
                                                         self._max_size))
         self._write_page(start_register, data, wraparound)
-
-    def _read_byte(self, register):
-        return self._read_register(register)
 
     def _read_register(self, register):
         # Implemented by subclass
@@ -305,13 +302,10 @@ class FRAM_SPI(FRAM):
         cs = digitalio.DigitalInOut(SPI_CS)
         _spi = spidev(spi_bus, cs, baudrate=baudrate)
 
-        write_buffer = bytearray([_SPI_OPCODE_RDID])
         read_buffer = bytearray(4)
         with _spi as spi:
-            spi.write(write_buffer)
+            spi.write(bytearray([_SPI_OPCODE_RDID]))
             spi.readinto(read_buffer)
-
-        print("Device ID:", read_buffer)
         prod_id = (read_buffer[3] << 8) + (read_buffer[2])
         if (read_buffer[0] != _SPI_MANF_ID) and (prod_id != _SPI_PROD_ID):
             raise OSError("FRAM SPI device not found.")
@@ -356,15 +350,12 @@ class FRAM_SPI(FRAM):
         with self._spi as spi:
             spi.write(bytearray([_SPI_OPCODE_WREN]))
         with self._spi as spi:
+            buffer[0] = _SPI_OPCODE_WRITE
+            buffer[1] = start_register >> 8
+            buffer[2] = start_register & 0xFF
+            spi.write(buffer)
             for i in range(0, data_length):
-                if not (start_register + i) > self._max_size:
-                    buffer[0] = (start_register + i) >> 8
-                    buffer[1] = (start_register + i) & 0xFF
-                else:
-                    buffer[0] = ((start_register + i) - self._max_size) >> 8
-                    buffer[1] = ((start_register + i) - self._max_size) & 0xFF
-                buffer[2] = data[i]
-                spi.write(buffer)
+                spi.write(bytearray([data[i]]))
         with self._spi as spi:
             spi.write(bytearray([_SPI_OPCODE_WRDI]))
 
