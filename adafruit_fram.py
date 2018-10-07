@@ -289,7 +289,17 @@ class FRAM_I2C(FRAM):
 class FRAM_SPI(FRAM):
     """ SPI class for FRAM.
 
+    :param: SPI_SCK: The SPI SCK pin. Must be a ``board.PIN`` object.
+    :param: SPI_MOSI: The SPI MOSI print. Must be a ``board.PIN`` object.
+    :param: SPI_MISO: The SPI MISO print. Must be a ``board.PIN`` object.
+    :param: SPI_CS: The SPI CS print. Must be a ``board.PIN`` object.
+    :param: bool write_protect: Turns on/off initial write protection.
+                                Default is ``False``.
+    :param: wp_pin: Physical ``WP`` breakout pin. Must be a ``board.PIN``
+                    object.
+    :param int baudrate: SPI baudrate to use. Default is ``1000000``.
     """
+
     _SPI_OPCODE_WREN = const(0x6) # Set write enable latch
     _SPI_OPCODE_WRDI = const(0x4) # Reset write enable latch
     _SPI_OPCODE_RDSR = const(0x5) # Read status register
