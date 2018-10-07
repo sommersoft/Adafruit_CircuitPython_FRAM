@@ -117,13 +117,13 @@ class FRAM:
             self._wp_pin = digitalio.DigitalInOut(wp_pin)
             # Make sure wp_pin is set to switch_to_output
             self._wp_pin.switch_to_output()
-            self._wp_pin.value = write_protect
         else:
             if not self._wp_pin is None:
                 # Deinit the pin to release it
                 self._wp_pin.deinit()
             self._wp_pin = None
-        self.write_protect = write_protect
+
+        self.write_protected = write_protect
 
     def read(self, register, length=1):
         """ Reads the data stored on the FRAM.
@@ -280,6 +280,12 @@ class FRAM_I2C(FRAM):
         if not self._wp_pin is None:
             self._wp_pin.value = value
 
+# the following pylint disables are related to the '_SPI_OPCODE' consts, the super
+# class setter '@FRAM.write_protected.setter', and pylint not being able to see
+# 'spi.write()' in SPIDevice. Travis run for reference:
+# https://travis-ci.com/sommersoft/Adafruit_CircuitPython_FRAM/builds/87112669
+
+# pylint: disable=no-member,undefined-variable
 class FRAM_SPI(FRAM):
     """ SPI class for FRAM.
 
@@ -292,15 +298,15 @@ class FRAM_SPI(FRAM):
     _SPI_OPCODE_WRITE = const(0x2) # Write memory code
     _SPI_OPCODE_RDID = const(0x9F) # Read device ID
 
-    #pylint: disable=too-many-arguments
+    #pylint: disable=too-many-arguments,too-many-locals
     def __init__(self, SPI_SCK, SPI_MOSI, SPI_MISO, SPI_CS, write_protect=False,
-                wp_pin=None, baudrate=100000):
+                 wp_pin=None, baudrate=100000):
         import digitalio
         from busio import SPI
         from adafruit_bus_device.spi_device import SPIDevice as spidev
         spi_bus = SPI(SPI_SCK, SPI_MOSI, SPI_MISO)
-        cs = digitalio.DigitalInOut(SPI_CS)
-        _spi = spidev(spi_bus, cs, baudrate=baudrate)
+        spi_cs = digitalio.DigitalInOut(SPI_CS)
+        _spi = spidev(spi_bus, spi_cs, baudrate=baudrate)
 
         read_buffer = bytearray(4)
         with _spi as spi:
