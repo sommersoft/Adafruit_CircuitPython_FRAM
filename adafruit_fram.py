@@ -273,7 +273,7 @@ class FRAM_I2C(FRAM):
                     buffer[1] = ((start_register + i) - self._max_size) & 0xFF
                 buffer[2] = data[i]
                 i2c.write(buffer)
-
+    # pylint: disable=no-member
     @FRAM.write_protected.setter
     def write_protected(self, value):
         self._wp = value
